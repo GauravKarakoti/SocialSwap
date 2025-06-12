@@ -1,3 +1,6 @@
 spacy
 tweepy
 farcaster
+python-dotenv
+transformers
+torch

@@ -2,10 +2,11 @@ import { useState } from 'react';
 import Dashboard from './components/Dashboard';
 import './App.css';
 import { tradeCoin, setApiKey } from '@zoralabs/coins-sdk';
-import { ethers } from 'ethers';
+import { ethers, BrowserProvider } from 'ethers';
+// import 'dotenv/config'; 
 
 // Set your Zora API key (required)
-setApiKey('YOUR_ZORA_API_KEY');
+// setApiKey(process.env.ZORA_API_KEY);
 
 export const executeSwap = async (ticker, ethAmount) => {
   const provider = new ethers.BrowserProvider(window.ethereum);
@@ -14,7 +15,7 @@ export const executeSwap = async (ticker, ethAmount) => {
   return tradeCoin({
     network: 'base-testnet', // Specify network here
     params: {
-      ticker,
+      tokenAddress: e.currentTarget.dataset.address,
       ethAmount: ethers.parseEther(ethAmount.toString()),
       direction: 'buy',
       slippage: 1
@@ -23,22 +24,31 @@ export const executeSwap = async (ticker, ethAmount) => {
   });
 };
 
+export const getSigner = async () => {
+     const provider = new BrowserProvider(window.ethereum);
+      return provider.getSigner();
+};
+
 export default function App() {
   const [walletConnected, setWalletConnected] = useState(false);
+  const [userAddress, setUserAddress] = useState('');
 
   return (
     <div className="container mx-auto">
       <h1 className="text-2xl font-bold p-4">SocialSwap</h1>
       <button 
         onClick={async () => {
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          setWalletConnected(true);
+          const accounts = await window.ethereum.request({ 
+           method: 'eth_requestAccounts' 
+          });
+         setUserAddress(accounts[0]);
+         setWalletConnected(true);
         }}
         className="btn-primary m-4"
       >
         {walletConnected ? 'Connected ✅' : 'Connect Wallet'}
       </button>
-      {walletConnected && <Dashboard />}
+      {walletConnected && <Dashboard userAddress={userAddress} />}
     </div>
   );
 }
