@@ -4,3 +4,4 @@ farcaster
 python-dotenv
 transformers
 torch
+textblob

@@ -1,5 +1,5 @@
 import express from 'express';
-import Redis, { Cluster } from 'ioredis';
+import Redis from 'ioredis';
 import { spawn } from 'child_process';
 import cors from 'cors';
 import 'dotenv/config'; 
@@ -7,6 +7,7 @@ import fetch from 'node-fetch';
 import { schedule } from 'node-cron';
 import pkg from '@gelatonetwork/relay-sdk';
 import { tradeCoin } from '@zoralabs/coins-sdk';
+import { ethers } from 'ethers';
 
 const { relay } = pkg;
 
@@ -15,13 +16,14 @@ app.use(cors());
 app.use(express.json());
 
 let redis;
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 try {
-  redis = new Redis(process.env.REDIS_URL || 6379);
+  redis = new Redis(REDIS_URL);
   redis.on('error', (err) => {
     console.error('Redis error:', err.message);
   });
   redis.on('connect', () => {
-    console.log('Connected to Redis');
+    console.log(`Connected to Redis at ${REDIS_URL}`);
   });
 } catch (err) {
   console.log(err);
@@ -156,10 +158,11 @@ app.post('/api/bot', async (req, res) => {
    });
   
    async function triggerGelatoSwap(userAddress, ticker, amount) {
-     const swapParams = {
+    const tokenAddress = "0xA292c308Bf0054c0c8b85bA5872499533343483a";
+    const swapParams = {
        network: 'base-testnet',
        params: {
-         ticker,
+         tokenAddress,
          ethAmount: ethers.parseEther(amount.toString()),
          direction: 'buy',
          slippage: 1
@@ -168,12 +171,17 @@ app.post('/api/bot', async (req, res) => {
      
      const request = {
        chainId: 8453, // Base mainnet
-       target: ZORA_SWAP_CONTRACT,
+       target: process.env.ZORA_SWAP_CONTRACT,
        data: tradeCoin.encode(swapParams),
        user: userAddress
      };
      
-     await relay.sponsoredCall(request, process.env.GELATO_API_KEY);
+     try {
+      await relay.sponsoredCall(request, process.env.GELATO_API_KEY);
+      console.log(`Triggered Gelato swap for ${ticker}`);
+    } catch (error) {
+      console.error('Gelato error:', error);
+    }
    }
   
    function checkCondition(sentiment, condition) {

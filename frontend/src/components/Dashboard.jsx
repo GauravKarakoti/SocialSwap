@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { executeSwap } from '../App';
 
-export default function Dashboard(userAddress) {
+export default function Dashboard({ userAddress }) {
   const [trends, setTrends] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -51,6 +51,11 @@ export default function Dashboard(userAddress) {
 
   if (loading) return <div className="p-4">Loading...</div>;
   if (error) return <div className="p-4 text-red-500">Error: {error}</div>;
+
+  const deactivateBot = (botId) => {
+    setBots(bots.filter(bot => bot.id !== botId));
+    console.log(`Deactivated bot ${botId}`);
+  };
 
   return (
     <div className="p-4">

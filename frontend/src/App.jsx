@@ -3,10 +3,9 @@ import Dashboard from './components/Dashboard';
 import './App.css';
 import { tradeCoin, setApiKey } from '@zoralabs/coins-sdk';
 import { ethers, BrowserProvider } from 'ethers';
-// import 'dotenv/config'; 
 
 // Set your Zora API key (required)
-// setApiKey(process.env.ZORA_API_KEY);
+setApiKey(import.meta.env.VITE_ZORA_API_KEY);
 
 export const executeSwap = async (ticker, ethAmount) => {
   const provider = new ethers.BrowserProvider(window.ethereum);

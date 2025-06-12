@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  app:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      - ZORA_API_KEY=${ZORA_API_KEY}
+      - GELATO_API_KEY=${GELATO_API_KEY}
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:

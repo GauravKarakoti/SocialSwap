@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from transformers import pipeline
 import torch
 from spacy_custom import add_sentiment_pipe
+from textblob import TextBlob
 
 load_dotenv()
 
@@ -25,17 +26,24 @@ gpt4 = pipeline(
 )
 
 def get_sentiment(text):
-    doc = nlp(text)
-    spacy_score = doc._.sentiment
-    
-    if 0.4 <= spacy_score <= 0.6:
-     gpt_result = gpt4(text[:512])[0]  # Truncate to 512 tokens
-     if gpt_result['label'] == 'POSITIVE':
-         return max(spacy_score, gpt_result['score'])
-     else:
-         return min(spacy_score, 1 - gpt_result['score'])
-             
-    return spacy_score
+    try:
+        doc = nlp(text)
+        spacy_score = doc._.sentiment
+        
+        if 0.4 <= spacy_score <= 0.6:
+            gpt_result = gpt4(text[:512])[0]  # Truncate to 512 tokens
+            if gpt_result['label'] == 'POSITIVE':
+                return max(spacy_score, gpt_result['score'])
+            else:
+                return min(spacy_score, 1 - gpt_result['score'])
+                
+        return spacy_score
+    except Exception as e:
+        print(f"Sentiment error: {e}")
+        # Fallback to TextBlob
+        blob = TextBlob(text)
+        return (blob.sentiment.polarity + 1) / 2
+
 
 # Scrape X (Twitter) for $TICKER
 twitter = Client(bearer_token=os.getenv("TWITTER_BEARER_TOKEN"))
