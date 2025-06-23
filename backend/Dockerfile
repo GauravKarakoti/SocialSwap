@@ -1,23 +1,12 @@
-# Use official Node.js image
-FROM node:lts
+# Dockerfile
 
-# Install Python and system dependencies
-RUN apt-get update 
-
-# Set working directory
+FROM node:18-slim
 WORKDIR /usr/src/app
 
-# Copy package files first for efficient caching
 COPY package*.json ./
+RUN npm install --production
 
-# Install dependencies
-RUN npm install
-
-# Copy application files
 COPY . .
 
-# Expose application port
 EXPOSE 3000
-
-# Start the application
 CMD ["node", "index.js"]

@@ -1,32 +1,36 @@
 version: '3.8'
 
 services:
-  app:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      REDIS_URL: "redis://redis:6379"
-      # Add other required environment variables:
-      COIN_GECKO_API_KEY: ${COIN_GECKO_API_KEY}
-      GELATO_API_KEY: ${GELATO_API_KEY}
-      ZORA_SWAP_CONTRACT: ${ZORA_SWAP_CONTRACT}
-    depends_on:
-      - redis
-    networks:
-      - app-network
-
   redis:
     image: redis:7-alpine
-    command: redis-server --save 60 1 --loglevel warning
+    restart: unless-stopped
     volumes:
       - redis_data:/data
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
-      - app-network
+      - appnet
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - appnet
 
 volumes:
   redis_data:
 
 networks:
-  app-network:
+  appnet:
     driver: bridge
