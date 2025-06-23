@@ -1,19 +1,19 @@
-# Use Node.js base image with Python support
-FROM node:20-bullseye
+# Use official Node.js image
+FROM node:lts
 
-# Install Python and required dependencies
+# Install Python and system dependencies
 RUN apt-get update && apt-get install -y python3 python3-pip
-RUN pip3 install nltk vaderSentiment
-
-# Download NLTK data for sentiment analysis
-RUN python3 -c "import nltk; nltk.download('vader_lexicon')"
 
 # Set working directory
-WORKDIR /app
+WORKDIR /usr/src/app
 
-# Copy package files and install dependencies
+# Copy package files first for efficient caching
 COPY package*.json ./
+COPY scripts/requirements.txt ./scripts/
+
+# Install dependencies
 RUN npm install
+RUN pip3 install -r scripts/requirements.txt
 
 # Copy application files
 COPY . .
