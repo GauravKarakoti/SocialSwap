@@ -46,75 +46,68 @@ try {
   };
 }
 
-// Cache coin trends and sentiment
 app.get('/api/trends', async (req, res) => {
   try {
     const cached = await redis.get('trends');
     if (cached) {
       console.log('Returning cached trends');
       return res.json(JSON.parse(cached));
-    } 
+    }
 
-    console.log('Querying Zora GraphQL for trendingCoins…');
-    const graphQLQuery = {
-      query: `
-        query TrendingCoins {
-          trendingCoins {
-            token {
-             symbol
-             address
-           }
-           price {
-             nativePrice {
-               value
-             }
-           }
-           marketCap
-          }
-        }
-      `,
-      variables: {}
-    };
-
-    const response = await fetch('https://api.zora.co/universal/graphql', {
-      method: 'POST',
+    console.log('Fetching trending coins from CoinGecko...');
+    const response = await fetch('https://api.coingecko.com/api/v3/search/trending', {
       headers: {
-        'Content-Type': 'application/json',
-        'X-API-KEY': process.env.ZORA_API_KEY
-      },
-      body: JSON.stringify(graphQLQuery)
+        'x-cg-demo-api-key': process.env.COIN_GECKO_API_KEY
+      }
     });
 
-    const text = await response.text(); // safer than json() directly
-    console.log("Zora response status:", response.status);
-    console.log("Zora response body:", text);
-
     if (!response.ok) {
-      throw new Error(`Zora GraphQL error: ${text}`);
+      const text = await response.text();
+      throw new Error(`CoinGecko error: ${response.status} - ${text}`);
     }
 
-    const json = JSON.parse(text);
-    if (json.errors) {
-      throw new Error(`Zora GraphQL returned errors: ${JSON.stringify(json.errors)}`);
+    const trendingData = await response.json();
+    const coinIds = trendingData.coins.map(coin => coin.item.id);
+
+    // Fetch market data for all trending coins in bulk
+    const marketsResponse = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coinIds.join(',')}&order=market_cap_desc`,
+      {
+        headers: {
+          'x-cg-demo-api-key': process.env.COIN_GECKO_API_KEY
+        }
+      }
+    );
+
+    if (!marketsResponse.ok) {
+      const text = await marketsResponse.text();
+      throw new Error(`CoinGecko markets error: ${marketsResponse.status} - ${text}`);
     }
 
-    // Assuming the shape is { data: { trendingCoins: [ … ] } }
-    const trendingData = json.data.trendingCoins.map(coin => ({
-      ticker: coin.token.symbol,
-      address: coin.token.address,
-      price: coin.price?.nativePrice?.value || 0,
-      marketCap: coin.marketCap || 0
-    }));
+    const marketsData = await marketsResponse.json();
+    const marketMap = new Map(marketsData.map(coin => [coin.id, coin]));
 
-    // 3) Cache it for 60 seconds
-    await redis.set('trends', JSON.stringify(trendingData), 'EX', 60);
+    // Build final coin data with contract addresses and pricing
+    const coins = trendingData.coins.map(coin => {
+      const marketInfo = marketMap.get(coin.item.id) || {};
+      return {
+        ticker: coin.item.symbol.toUpperCase(),
+        address: coin.item.platforms?.base || null,
+        price: marketInfo.current_price || 0,
+        marketCap: marketInfo.market_cap || 0
+      };
+    });
 
-    return res.json({ coins: trendingData });
+    // Cache for 60 seconds
+    await redis.set('trends', JSON.stringify(coins), 'EX', 60);
+
+    return res.json({ coins });
   } catch (error) {
     console.error('Trends error:', error.message);
-    return res
-      .status(500)
-      .json({ error: error.message || 'Failed to fetch trends', coins: [] });
+    return res.status(500).json({
+      error: error.message || 'Failed to fetch trends',
+      coins: []
+    });
   }
 });
 
