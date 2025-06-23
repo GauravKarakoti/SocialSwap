@@ -1,18 +1,25 @@
-# Use official Node.js image
-FROM node:18-slim
+# Use Node.js base image with Python support
+FROM node:20-bullseye
+
+# Install Python and required dependencies
+RUN apt-get update && apt-get install -y python3 python3-pip
+RUN pip3 install nltk vaderSentiment
+
+# Download NLTK data for sentiment analysis
+RUN python3 -c "import nltk; nltk.download('vader_lexicon')"
 
 # Set working directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Copy package manifests and install dependencies
+# Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install --production
+RUN npm install
 
-# Copy source
+# Copy application files
 COPY . .
 
-# Expose your app port
+# Expose application port
 EXPOSE 3000
 
-# Start your Node.js server
+# Start the application
 CMD ["node", "index.js"]
