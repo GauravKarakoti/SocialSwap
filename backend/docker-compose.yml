@@ -3,7 +3,6 @@ version: '3.8'
 services:
   redis:
     image: redis:7-alpine
-    container_name: trend-bot-redis
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -13,24 +12,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - appnet
 
   app:
     build: .
-    image: trend-bot-app:latest
-    container_name: trend-bot-app
     restart: unless-stopped
     ports:
       - "3000:3000"
     env_file:
       - .env
-    environment:
-      REDIS_URL: "redis://redis:6379"
-      COIN_GECKO_API_KEY: "${COIN_GECKO_API_KEY}"
-      ZORA_SWAP_CONTRACT: "${ZORA_SWAP_CONTRACT}"
-      GELATO_API_KEY: "${GELATO_API_KEY}"
     depends_on:
       redis:
         condition: service_healthy
+    networks:
+      - appnet
 
 volumes:
   redis_data:
+
+networks:
+  appnet:
+    driver: bridge
