@@ -1,12 +1,18 @@
-FROM node:18-alpine
+# Use official Node.js image
+FROM node:18-slim
 
-WORKDIR /app
+# Set working directory
+WORKDIR /usr/src/app
+
+# Copy package manifests and install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm install --production
+
+# Copy source
 COPY . .
 
-ENV REDIS_URL=redis://redis:6379
-ENV PORT=3000
-
+# Expose your app port
 EXPOSE 3000
+
+# Start your Node.js server
 CMD ["node", "index.js"]

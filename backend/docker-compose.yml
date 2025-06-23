@@ -1,19 +1,28 @@
 version: '3.8'
+
 services:
   app:
-    build: ./backend
+    build: .
+    image: your-app-name:latest
+    container_name: trend-bot-app
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - ZORA_API_KEY=${ZORA_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - COIN_GECKO_API_KEY=${COIN_GECKO_API_KEY}
+      - ZORA_SWAP_CONTRACT=${ZORA_SWAP_CONTRACT}
       - GELATO_API_KEY=${GELATO_API_KEY}
     depends_on:
       - redis
 
   redis:
     image: redis:7-alpine
+    container_name: trend-bot-redis
+    restart: unless-stopped
     volumes:
       - redis_data:/data
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
 
 volumes:
   redis_data:
