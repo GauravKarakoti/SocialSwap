@@ -6,20 +6,27 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - REDIS_URL=redis://redis:6379
-      - COIN_GECKO_API_KEY=${COIN_GECKO_API_KEY}
-      - ZORA_SWAP_CONTRACT=${ZORA_SWAP_CONTRACT}
-      - GELATO_API_KEY=${GELATO_API_KEY}
+      REDIS_URL: "redis://redis:6379"
+      # Add other required environment variables:
+      COIN_GECKO_API_KEY: ${COIN_GECKO_API_KEY}
+      GELATO_API_KEY: ${GELATO_API_KEY}
+      ZORA_SWAP_CONTRACT: ${ZORA_SWAP_CONTRACT}
     depends_on:
       - redis
+    networks:
+      - app-network
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
-    command: redis-server --save 60 1 --loglevel warning
+    networks:
+      - app-network
 
 volumes:
   redis_data:
+
+networks:
+  app-network:
+    driver: bridge
