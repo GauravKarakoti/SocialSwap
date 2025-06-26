@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { executeSwap } from '../App';
+import SentimentChart from './SentimentChart';
 
 export default function Dashboard({ userAddress }) {
   const [trends, setTrends] = useState([]);
@@ -8,6 +9,7 @@ export default function Dashboard({ userAddress }) {
   const [bots, setBots] = useState([]);
   const [newBot, setNewBot] = useState({ ticker: '', amount: 0.01, condition: 'gt', value: 0.7});
   const [walletConnected, setWalletConnected] = useState(true);
+  const [sentimentData, setSentimentData] = useState({});
 
   useEffect(() => {
     fetch('https://socialswap.onrender.com/api/trends')
@@ -37,11 +39,20 @@ export default function Dashboard({ userAddress }) {
 
   useEffect(() => {
        if (walletConnected) {
-         fetch(`/api/bot?userAddress=${userAddress}`)
+         fetch(`/api/bot/history?userAddress=${userAddress}`)
            .then(res => res.json())
-           .then(setBots);
+           .then(data => setBots(data.active));
        }
      }, [walletConnected]);
+
+  const trackSentiment = async (ticker) => {
+    const response = await fetch(`/api/sentiment/history?ticker=${ticker}`);
+    const data = await response.json();
+    setSentimentData(prev => ({
+      ...prev,
+      [ticker]: data
+    }));
+  };
 
   useEffect(() => {
     if (!window.ethereum) {
@@ -61,7 +72,7 @@ export default function Dashboard({ userAddress }) {
     <div className="p-4">
      <div className="mb-8 p-6 card">
        <h3 className="text-xl font-bold mb-4">Create Trade Bot</h3>
-       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
          <input
            type="text"
            placeholder="Ticker (e.g. DOG)"
@@ -109,6 +120,55 @@ export default function Dashboard({ userAddress }) {
            Create Bot
          </button>
        </div>
+     </div>
+
+     <div className="mb-8 p-6 card">
+        <h3 className="text-xl font-bold mb-4">Bot Performance</h3>
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+          {bots.map(bot => (
+            <div key={bot.id} className="p-4 border rounded-lg border-blue-500/30">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="font-bold text-lg">{bot.ticker} Bot</h4>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => deactivateBot(bot.id)}
+                    className="px-3 py-1 bg-red-500/20 rounded text-red-400"
+                  >
+                    Deactivate
+                  </button>
+                  <button 
+                    onClick={() => trackSentiment(bot.ticker)}
+                    className="px-3 py-1 bg-blue-500/20 rounded"
+                  >
+                    Analyze
+                  </button>
+                </div>
+              </div>
+              
+              {sentimentData[bot.ticker] && (
+                <SentimentChart data={sentimentData[bot.ticker]} />
+              )}
+              
+              <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                <div>
+                  <p className="text-gray-400">Executions</p>
+                  <p>{bot.executions || 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400">Last Triggered</p>
+                  <p>{bot.lastExecuted ? 
+                    new Date(bot.lastExecuted).toLocaleDateString() : 'Never'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400">Status</p>
+                  <p className={bot.active ? 'text-green-400' : 'text-red-400'}>
+                    {bot.active ? 'Active' : 'Inactive'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
      </div>
      
      <div className="mb-8">

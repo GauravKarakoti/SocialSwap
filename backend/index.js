@@ -203,23 +203,46 @@ app.post('/api/bot', async (req, res) => {
          
         if (checkCondition(sentiment, condition)) {
            await triggerGelatoSwap(userAddress, ticker, bot.amount);
-           await redis.hset(key, 'lastExecuted', Date.now());
+           await redis.hSet(key, 'lastExecuted', Date.now());
          }
        }
       } catch (error) {
        console.error('Bot engine error:', error);
      }
    });
+
+   async function getSentiment(ticker) {
+    const cacheKey = `sentiment:${ticker}`;
+    const cached = await redis.get(cacheKey);
+    if (cached) return parseFloat(cached);
+    
+    try {
+      const python = spawn('python', ['scripts/sentiment.py', ticker]);
+      let score = 0.5;
+      
+      python.stdout.on('data', (data) => {
+        score = parseFloat(data.toString());
+      });
+      
+      await new Promise((resolve) => python.on('close', resolve));
+      await redis.set(cacheKey, score, { EX: 300 }); // 5-min cache
+      return score;
+    } catch (error) {
+      console.error('Sentiment error:', error);
+      return 0.5; // Fallback neutral sentiment
+    }
+   }
   
    async function triggerGelatoSwap(userAddress, ticker, amount) {
-    const tokenAddress = "0xA292c308Bf0054c0c8b85bA5872499533343483a";
+    const tokenAddress = await getTokenAddress(ticker);
+    if (!tokenAddress) return;
     const swapParams = {
-       network: 'base-testnet',
+       network: 'base',
        params: {
          tokenAddress,
          ethAmount: ethers.parseEther(amount.toString()),
          direction: 'buy',
-         slippage: 1
+         slippage: 0.5
        }
     };
      
@@ -227,15 +250,37 @@ app.post('/api/bot', async (req, res) => {
        chainId: 8453, // Base mainnet
        target: process.env.ZORA_SWAP_CONTRACT,
        data: tradeCoin.encode(swapParams),
-       user: userAddress
+       user: userAddress,
+       sponsorApiKey: process.env.GELATO_API_KEY
      };
      
      try {
-      await relay.sponsoredCall(request, process.env.GELATO_API_KEY);
-      console.log(`Triggered Gelato swap for ${ticker}`);
+      const taskId = await relay.sponsoredCall(request);
+      console.log(`Triggered Gelato swap for ${ticker}. Task ID: ${taskId}`);
+      return taskId;
     } catch (error) {
       console.error('Gelato error:', error);
     }
+   }
+
+   async function getTokenAddress(ticker) {
+    const cacheKey = `token:${ticker}`;
+    const cached = await redis.get(cacheKey);
+    if (cached) return cached;
+    
+    const response = await fetch(`https://api.coingecko.com/api/v3/coins/${ticker}`, {
+      headers: { 'x-cg-demo-api-key': process.env.COIN_GECKO_API_KEY }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const address = data.platforms?.base;
+      if (address) {
+        await redis.set(cacheKey, address, { EX: 3600 }); // 1-hour cache
+        return address;
+      }
+    }
+    return null;
    }
   
    function checkCondition(sentiment, condition) {
