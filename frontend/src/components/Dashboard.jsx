@@ -10,7 +10,7 @@ export default function Dashboard({ userAddress }) {
   const [walletConnected, setWalletConnected] = useState(true);
 
   useEffect(() => {
-    fetch('https://socialswap-backend.onrender.com/api/trends')
+    fetch('https://socialswap.onrender.com/api/trends')
       .then(async (res) => {
         const text = await res.text();
         if (!res.ok) {
