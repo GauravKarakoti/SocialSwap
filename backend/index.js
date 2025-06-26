@@ -1,5 +1,4 @@
 import express from 'express';
-import Redis from 'ioredis';
 import { spawn } from 'child_process';
 import cors from 'cors';
 import 'dotenv/config'; 
@@ -15,36 +14,98 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let redis;
-const REDIS_URL = process.env.REDIS_URL;
-try {
-  redis = new Redis(REDIS_URL);
-  redis.on('error', (err) => {
-    console.error('Redis error:', err.message);
-  });
-  redis.on('connect', () => {
-    console.log(`Connected to Redis at ${REDIS_URL}`);
-  });
-} catch (err) {
-  console.log(err);
-  console.error('Redis connection failed, using in-memory fallback');
-  redis = {
-    store: new Map(),
-    get: (key) => Promise.resolve(redis.store.get(key)),
-    set: (key, val, ...args) => {
-      redis.store.set(key, val);
-      return Promise.resolve('OK');
+// In-memory store implementation
+const memoryStore = (() => {
+  const store = new Map();          // Main key-value store
+  const hashes = new Map();         // Hash structures
+  const expirations = new Map();    // Key expiration timestamps
+  const timeouts = new Map();       // Timeout references
+
+  return {
+    // String operations
+    async get(key) {
+      if (expirations.has(key) && Date.now() > expirations.get(key)) {
+        this.del(key);
+        return null;
+      }
+      return store.get(key) || null;
     },
-    hset: (key, field, value) => {
-      if (!redis.store.has(key)) redis.store.set(key, {});
-      const obj = redis.store.get(key);
-      obj[field] = value;
-      return Promise.resolve(1);
+
+    async set(key, value, mode, ttl) {
+      store.set(key, value);
+      
+      // Handle expiration
+      if (mode === 'EX' && ttl) {
+        const expireAt = Date.now() + ttl * 1000;
+        expirations.set(key, expireAt);
+        
+        // Clear existing timeout if any
+        if (timeouts.has(key)) clearTimeout(timeouts.get(key));
+        
+        // Set new timeout
+        timeouts.set(key, setTimeout(() => {
+          this.del(key);
+        }, ttl * 1000));
+      }
+      return 'OK';
     },
-    hgetall: (key) => Promise.resolve(redis.store.get(key) || {}),
-    keys: (pattern) => Promise.resolve([...redis.store.keys()].filter(k => k.match(pattern)))
+
+    async del(key) {
+      store.delete(key);
+      hashes.delete(key);
+      expirations.delete(key);
+      if (timeouts.has(key)) {
+        clearTimeout(timeouts.get(key));
+        timeouts.delete(key);
+      }
+      return 1;
+    },
+
+    // Hash operations
+    async hset(key, field, value) {
+      if (!hashes.has(key)) hashes.set(key, new Map());
+      
+      const hashMap = hashes.get(key);
+      if (typeof field === 'object') {
+        // Multi-field set
+        let count = 0;
+        for (const [f, v] of Object.entries(field)) {
+          hashMap.set(f, v);
+          count++;
+        }
+        return count;
+      }
+      // Single field set
+      hashMap.set(field, value);
+      return 1;
+    },
+
+    async hgetall(key) {
+      if (!hashes.has(key)) return {};
+      return Object.fromEntries(hashes.get(key));
+    },
+
+    // Pattern matching
+    async keys(pattern) {
+      const regex = new RegExp(
+        `^${pattern.replace(/\*/g, '.*').replace(/\?/g, '.')}$`
+      );
+      
+      const results = [];
+      // Check string keys
+      for (const key of store.keys()) {
+        if (regex.test(key)) results.push(key);
+      }
+      // Check hash keys
+      for (const key of hashes.keys()) {
+        if (regex.test(key) && !results.includes(key)) results.push(key);
+      }
+      return results;
+    }
   };
-}
+})();
+
+const redis = memoryStore;
 
 app.get('/api/trends', async (req, res) => {
   try {
@@ -188,12 +249,7 @@ app.post('/api/bot', async (req, res) => {
 
 // Run Python sentiment script on-demand
 app.get('/api/sentiment/:ticker', async (req, res) => {
-  try {
-    if (redis.get) {
-      const cached = await redis.get(`sentiment:${req.params.ticker}`);
-      if (cached) return res.json({ score: parseFloat(cached) });
-    }
-       
+  try {    
     const python = spawn('python', ['scripts/sentiment.py', req.params.ticker]);
     let score = 0.5;
        
